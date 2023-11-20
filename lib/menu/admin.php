@@ -21,13 +21,18 @@ class PQTProductImport_Menu_Admin
 
     static function __htmlMenu()
     {
+        $excelMauURL = esc_url(PQT_PRODUCT__PLUGIN_URL . '/download/mau.xlsx');
         $arrImported = [];
         if (isset($_FILES['importFile'])) {
             $fileData = $_FILES['importFile'];
-            $arrDataImport = self::readExcelFile($fileData);
-            $arrImported = self::insertProduct($arrDataImport);
+            $importNumber = (int) $_POST['importNumber'];
+            $importUnique = (!empty($_POST['importUnique'])) && (int) $_POST['importUnique'] === 1 ? true : false;
+            $arrDataImport = self::readExcelFile($fileData, $importNumber);
+            $arrImported = self::insertProduct($arrDataImport, $importUnique);
         }
 ?>
+        <h1><?php echo PQT_PRODUCT_IMPORT_NAME; ?></h1>
+        <p style="font-weight:bold">Import sản phẩm Woocommerce theo Format đã có sẵn, tải <a href="<?php echo $excelMauURL; ?>"> mẫu ở đây</a></p>
         <div class="wrap">
             <?php if (!empty($arrImported)) : ?>
                 <div class="notice notice-success">
@@ -40,8 +45,23 @@ class PQTProductImport_Menu_Admin
                     <tbody>
                         <tr>
                             <th scope="row"><label for="blogname">Import Product (Excel File)</label></th>
-                            <td><input name="importFile" accept=".xlsx" type="file" id="importFile" value="test" class="regular-text"></td>
+                            <td><input name="importFile" accept=".xlsx" type="file" id="importFile" value="test" class="regular-text">
+                            </td>
                         </tr>
+
+                        <tr>
+                            <th scope="row"><label for="blogname">Số lượng (0 là toàn bộ): </label></th>
+                            <td><input name="importNumber" type="number" id="importNumber" value="0" class="regular-text"></td>
+                        </tr>
+
+                        <tr>
+                            <th scope="row"><label for="blogname">Check trùng lặp: </label></th>
+                            <td>
+                                <input name="importUnique" checked type="checkbox" id="importUnique" value="1" class="regular-text"><br>
+                                <label for="">Nếu có sản phẩm trùng, chỉ cập nhật các thuộc tính, không tạo sản phẩm mới.</label>
+                            </td>
+                        </tr>
+
                     </tbody>
                 </table>
                 <?php submit_button('Import') ?>
@@ -52,7 +72,7 @@ class PQTProductImport_Menu_Admin
 
 
 
-    static function readExcelFile($fileData)
+    static function readExcelFile($fileData, $max = 0)
     {
         $arrData = [];
         $inputFile = $fileData['tmp_name'];
@@ -66,10 +86,11 @@ class PQTProductImport_Menu_Admin
 
             // Remove header row 
             unset($worksheet_arr[0]);
-
+            $count = 0;
             foreach ($worksheet_arr as $row) {
+                $count++;
                 $arrData[] = $row;
-                break;
+                if ($max > 0 && $max < $count) break;
             }
         } else {
             echo "Please upload an XLSX or ODS file";
@@ -77,31 +98,30 @@ class PQTProductImport_Menu_Admin
         return $arrData;
     }
 
-    static function insertProduct($arrDataImport)
+    static function insertProduct($arrDataImport, $unique = false)
     {
         $postData = [];
         foreach ($arrDataImport as $value) {
-            $sku = $value[0]; // SKU
-            $productCatName = $value[1]; // Product Category
-            $attrItemType = $value[2]; // Item Type
-            $productName = $value[3]; // Product Name
-            $attrDesigner = $value[4]; // Designer
-            $attrBrand = $value[5]; // Brand
-            $productDescription = $value[6]; // Product Description
-            $attrGender = $value[7]; // Gender
-            $attrFragranceNotes = $value[8]; // Fragrance Notes
-            $attrYearIntroduced = $value[9]; // Year Introduced
-            $attrRecommendedUse = $value[10]; // Recommended Use
-            $salePrice = $value[11]; // MSRP => sale price
-            $price = $value[12]; // FNET Wholesale Price => price
-            $urlImageLarge = $value[13]; // Image Large URL
-            $urlImageSmall = $value[14]; // Image Small URL
-            $url = $value[15]; // url product
-
+            $sku = sanitize_text_field($value[0]); // SKU
+            $productCatName = sanitize_text_field($value[1]); // Product Category
+            $attrItemType = sanitize_text_field($value[2]); // Item Type
+            $productName = sanitize_text_field($value[3]); // Product Name
+            $attrDesigner = sanitize_text_field($value[4]); // Designer
+            $attrBrand = sanitize_text_field($value[5]); // Brand
+            $productDescription = sanitize_text_field($value[6]); // Product Description
+            $attrGender = sanitize_text_field($value[7]); // Gender
+            $attrFragranceNotes = sanitize_text_field($value[8]); // Fragrance Notes
+            $attrYearIntroduced = sanitize_text_field($value[9]); // Year Introduced
+            $attrRecommendedUse = sanitize_text_field($value[10]); // Recommended Use
+            $salePrice = sanitize_text_field($value[11]); // MSRP => sale price
+            $price = sanitize_text_field($value[12]); // FNET Wholesale Price => price
+            $urlImageLarge = sanitize_text_field($value[13]); // Image Large URL
+            $urlImageSmall = sanitize_text_field($value[14]); // Image Small URL
+            $url = sanitize_text_field($value[15]); // url product
 
             // create new product 
             $postId = 0;
-            $post = self::getProductByName($productName);
+            $post = $unique ? self::getProductByName($productName) : null;
             if (empty($post)) {
                 $postId = wp_insert_post(array(
                     //'post_title' => 'Adams Product',
@@ -110,10 +130,7 @@ class PQTProductImport_Menu_Admin
                     'post_status' => 'publish',
                     'post_type' => "product",
                 ));
-            }
-            else $postId = $post->ID;
-
-
+            } else $postId = $post->ID;
 
             if ($postId) {
 
@@ -178,8 +195,6 @@ class PQTProductImport_Menu_Admin
                 update_post_meta($postId, '_manage_stock', 'no');
                 update_post_meta($postId, '_backorders', 'no');
                 update_post_meta($postId, '_stock', '');
-
-
 
                 // upload image 
                 self::uploadImageToPost($urlImageLarge, $postId);
