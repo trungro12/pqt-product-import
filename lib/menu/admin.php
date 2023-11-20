@@ -23,7 +23,12 @@ class PQTProductImport_Menu_Admin
     {
         $excelMauURL = esc_url(PQT_PRODUCT__PLUGIN_URL . '/download/mau.xlsx');
         $arrImported = [];
-        if (isset($_FILES['importFile'])) {
+        if (
+            isset($_FILES['importFile']) &&
+            !empty($_POST['action']) &&
+            !empty($_POST['_wpnonce']) &&
+            wp_verify_nonce($_POST['_wpnonce'], $_POST['action'])
+        ) {
             $fileData = $_FILES['importFile'];
             $importNumber = (int) $_POST['importNumber'];
             $importUnique = (!empty($_POST['importUnique'])) && (int) $_POST['importUnique'] === 1 ? true : false;
@@ -63,6 +68,10 @@ class PQTProductImport_Menu_Admin
                         </tr>
 
                     </tbody>
+
+                    <input type="hidden" name="action" value="importFile">
+                    <?php wp_nonce_field('importFile');  ?>
+
                 </table>
                 <?php submit_button('Import') ?>
             </form>
