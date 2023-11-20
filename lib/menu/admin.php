@@ -8,6 +8,7 @@ class PQTProductImport_Menu_Admin
     static function init()
     {
         require_once(PQT_PRODUCT__PLUGIN_DIR . "/vendor/autoload.php");
+        self::addAjaxInsertProduct();
         self::addMenu();
     }
 
@@ -33,17 +34,85 @@ class PQTProductImport_Menu_Admin
             $importNumber = (int) $_POST['importNumber'];
             $importUnique = (!empty($_POST['importUnique'])) && (int) $_POST['importUnique'] === 1 ? true : false;
             $arrDataImport = self::readExcelFile($fileData, $importNumber);
-            $arrImported = self::insertProduct($arrDataImport, $importUnique);
-        }
+            // $arrImported = self::insertProduct($arrDataImport, $importUnique);
+
+
 ?>
+
+            <script>
+                (function($) {
+                    $(function() {
+                        const arrData = JSON.parse(atob('<?php echo base64_encode(json_encode($arrDataImport)); ?>'));
+                        var productOK = 0;
+                        const stepImport = 30;
+                        var productErr = 0;
+                        const showInfo = $('#showInfo');
+
+                        function importProduct(arrProduct, cb = function() {}) {
+                            showInfo.show();
+                            $.ajax({
+                                type: "post",
+                                url: "<?php echo admin_url('admin-ajax.php'); ?>",
+                                data: {
+                                    action: "ajaxInsertProductImport",
+                                    arrProduct: arrProduct,
+                                    importUnique: <?php echo $importUnique; ?>
+                                },
+                                success: function(msg) {
+                                    if (msg.success) {
+                                        productOK += msg.data.count;
+                                        showInfo.find('#productOK').text(productOK);
+                                    } else {
+                                        productErr += stepImport;
+                                        showInfo.find('#productError').text(productErr);
+                                    }
+                                    cb();
+                                },
+                                complete: function() {
+
+                                }
+                            });
+                        }
+
+                        var index = 0;
+                        // const count = arrData.length;
+                        const callBackImport = function() {
+                            if (index >= arrData.length) {
+                                $('.waitForImport').remove();
+                                $('.loadingscreen').remove();
+                                alert('Import hoàn tất!');
+                                return;
+                            };
+                            const arrDataProduct = [];
+                            for (let i = index; i < index + stepImport; i++) {
+                                index++;
+                                if (typeof arrData[i] !== 'object' || arrData.length <= i) break;
+                                // console.log(arrData[i]);
+                                arrDataProduct.push(arrData[i]);
+
+                            }
+                            if (arrDataProduct.length > 0) importProduct(arrDataProduct, callBackImport);
+                        }
+                        callBackImport();
+                    });
+                })(jQuery);
+            </script>
+
+        <?php
+            self::loadingScreen();
+        }
+        ?>
         <h1><?php echo PQT_PRODUCT_IMPORT_NAME; ?></h1>
         <p style="font-weight:bold">Import sản phẩm Woocommerce theo Format đã có sẵn, tải <a href="<?php echo $excelMauURL; ?>"> mẫu ở đây</a></p>
         <div class="wrap">
-            <?php if (!empty($arrImported)) : ?>
+            <div id="showInfo" style="display: none;">
                 <div class="notice notice-success">
-                    <p>Đã Import <?php echo count($arrImported); ?> sản phẩm thành công.</p>
+                    <p> <b style="color:red" class="waitForImport">Đang thực hiện...</b> Đã Import <b style="color: red;"><span id="productOK">0</span></b> sản phẩm thành công.</p>
                 </div>
-            <?php endif; ?>
+                <div class="notice notice-error">
+                    <p><b style="color:red" class="waitForImport">Đang thực hiện...</b> Đã Import <b style="color: red;"><span id="productError">0</span></b> sản phẩm thất bại.</p>
+                </div>
+            </div>
 
             <form action="" method="post" action="options.php" enctype="multipart/form-data">
                 <table class="form-table" role="presentation">
@@ -76,7 +145,7 @@ class PQTProductImport_Menu_Admin
                 <?php submit_button('Import') ?>
             </form>
         </div>
-<?php
+    <?php
     }
 
 
@@ -280,5 +349,148 @@ class PQTProductImport_Menu_Admin
         ]);
 
         return $query->have_posts() ? reset($query->posts) : null;
+    }
+
+
+
+    static function addAjaxInsertProduct()
+    {
+        function ajaxInsertProductImport()
+        {
+            $arrProduct = empty($_POST['arrProduct']) ? [] : $_POST['arrProduct'];
+            $importUnique = empty($_POST['importUnique']) ? false : true;
+            if ($count = count(PQTProductImport_Menu_Admin::insertProduct($arrProduct, $importUnique))) {
+                wp_send_json_success(['count' => $count]);
+            } else wp_send_json_error();
+            exit;
+        }
+        add_action('wp_ajax_ajaxInsertProductImport', 'ajaxInsertProductImport'); // executed when logged in
+        // add_action('wp_ajax_ajaxInsertProductImport', 'ajaxInsertProductImport' ); // executed when logged out
+    }
+
+
+    static function loadingScreen()
+    {
+    ?>
+        <style>
+            .screen {
+                opacity: .3;
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: black;
+                display: flex;
+                align-items: center;
+            }
+
+            .loader {
+                width: 100%;
+                height: 15px;
+                text-align: center;
+            }
+
+            .dot {
+                position: relative;
+                width: 15px;
+                height: 15px;
+                margin: 0 2px;
+                display: inline-block;
+            }
+
+            .dot:first-child:before {
+                animation-delay: 0ms;
+            }
+
+            .dot:first-child:after {
+                animation-delay: 0ms;
+            }
+
+            .dot:last-child:before {
+                animation-delay: 200ms;
+            }
+
+            .dot:last-child:after {
+                animation-delay: 200ms;
+            }
+
+            .dot:before {
+                content: "";
+                position: absolute;
+                left: 0;
+                width: 15px;
+                height: 15px;
+                background-color: blue;
+                animation-name: dotHover;
+                animation-duration: 900ms;
+                animation-timing-function: cubic-bezier(.82, 0, .26, 1);
+                animation-iteration-count: infinite;
+                animation-delay: 100ms;
+                background: white;
+                border-radius: 100%;
+            }
+
+            .dot:after {
+                content: "";
+                position: absolute;
+                z-index: -1;
+                background: black;
+                box-shadow: 0px 0px 1px black;
+                opacity: .20;
+                width: 100%;
+                height: 3px;
+                left: 0;
+                bottom: -2px;
+                border-radius: 100%;
+                animation-name: dotShadow;
+                animation-duration: 900ms;
+                animation-timing-function: cubic-bezier(.82, 0, .26, 1);
+                animation-iteration-count: infinite;
+                animation-delay: 100ms;
+            }
+
+            @keyframes dotShadow {
+                0% {
+                    transform: scaleX(1);
+                }
+
+                50% {
+                    opacity: 0;
+                    transform: scaleX(.6);
+                }
+
+                100% {
+                    transform: scaleX(1);
+                }
+            }
+
+            @keyframes dotHover {
+                0% {
+                    top: 0px;
+                }
+
+                50% {
+                    top: -50px;
+                    transform: scale(1.1);
+                }
+
+                100% {
+                    top: 0;
+                }
+            }
+        </style>
+        <div class="loadingscreen">
+            <div class="screen">
+
+                <div class="loader">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+
+            </div>
+        </div>
+<?php
     }
 }
