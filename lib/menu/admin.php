@@ -51,8 +51,7 @@ class PQTProductImport_Menu_Admin
                     $(function() {
                         const importMax = <?php echo $importNumber; ?>;
                         const arrData = JSON.parse(atob('<?php echo base64_encode(json_encode($arrDataImport)); ?>'));
-                        const productTotal = arrData.length;
-                        var productOK = 0;
+                        var productOk = 0;
                         var productErr = 0;
                         const stepImport = <?php echo $importStep; ?>;
                         const showInfo = $('#showInfo');
@@ -69,7 +68,8 @@ class PQTProductImport_Menu_Admin
                                 },
                                 success: function(msg) {
                                     if (msg.success) {
-                                        productOK += msg.data.count;
+                                        productOk += msg.data.countOk;
+                                        productErr += msg.data.countErr;
 
                                     } else {}
                                     cb();
@@ -84,14 +84,13 @@ class PQTProductImport_Menu_Admin
                         var isFinish = false;
                         // const count = arrData.length;
                         const callBackImport = function() {
-                            $('#productOk').text(productOK);
+                            $('#productOk').text(productOk);
 
                             if (index >= arrData.length) {
                                 $('.waitForImport').remove();
                                 $('.loadingscreen').remove();
                                 if (arrData.length < 1) return;
 
-                                productErr = productTotal - productOK;
                                 showInfo.find('#productError').text(productErr);
                                 if (!isFinish) alert('Import hoàn tất!');
                                 isFinish = true;
@@ -471,7 +470,7 @@ class PQTProductImport_Menu_Admin
             $arrProduct = empty($_POST['arrProduct']) ? [] : $_POST['arrProduct'];
             $importUnique = empty($_POST['importUnique']) ? PQTProductImport_Menu_Admin::IMPORT_UNIQUE_UPDATE : (int) $_POST['importUnique'];
             if ($count = count(PQTProductImport_Menu_Admin::insertProduct($arrProduct, $importUnique))) {
-                wp_send_json_success(['count' => $count]);
+                wp_send_json_success(['countOk' => $count, 'countErr' => count($arrProduct) - $count]);
             } else wp_send_json_error();
             exit;
         }
