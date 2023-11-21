@@ -319,6 +319,7 @@ class PQTProductImport_Menu_Admin
     static function uploadImageToPost($imageUrl, $postId)
     {
         $filename = self::downloadImageFromUrl($imageUrl);
+        if (empty($filename)) return;
 
         // The ID of the post this attachment is for.
         $parent_post_id = $postId;
@@ -361,6 +362,9 @@ class PQTProductImport_Menu_Admin
         $filename = $uniq_name . '.' . $imagetype;
 
         $uploaddir = wp_upload_dir();
+
+        if (!file_exists($uploaddir['path'])) mkdir($uploaddir['path'], 0755);
+
         $uploadfile = $uploaddir['path'] . '/' . $filename;
         $contents = file_get_contents($imageurl);
         $savefile = fopen($uploadfile, 'w');
