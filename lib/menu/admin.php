@@ -90,11 +90,11 @@ class PQTProductImport_Menu_Admin
                                 $('.waitForImport').remove();
                                 $('.loadingscreen').remove();
                                 if (arrData.length < 1) return;
-                                
+
                                 productErr = productTotal - productOK;
                                 showInfo.find('#productError').text(productErr);
-                                isFinish = true;
                                 if (!isFinish) alert('Import hoàn tất!');
+                                isFinish = true;
                                 return;
                             };
                             const arrDataProduct = [];
