@@ -381,21 +381,42 @@ class PQTProductImport_Menu_Admin
     static function downloadImageFromUrl($imageUrl)
     {
 
-        $imageurl = $imageUrl;
-        $imagetype = end(explode('/', getimagesize($imageurl)['mime']));
-        $uniq_name = date('dmY') . '' . (int) microtime(true);
-        $filename = $uniq_name . '.' . $imagetype;
+        try {
+            $imageurl = $imageUrl;
+            $imagetype = end(explode('/', getimagesize($imageurl)['mime']));
+            $uniq_name = date('dmY') . '' . (int) microtime(true);
+            $filename = $uniq_name . '.' . $imagetype;
 
-        $uploaddir = wp_upload_dir();
+            $uploaddir = wp_upload_dir();
 
-        if (!file_exists($uploaddir['path'])) mkdir($uploaddir['path'], 0755);
+            // if (!file_exists($uploaddir['path'])) mkdir($uploaddir['path'], 0755);
 
-        $uploadfile = $uploaddir['path'] . '/' . $filename;
-        $contents = file_get_contents($imageurl);
-        $savefile = fopen($uploadfile, 'w');
-        $isOK = fwrite($savefile, $contents);
-        fclose($savefile);
-        return $isOK ? $uploadfile : null;
+            $uploadfile = $uploaddir['path'] . '/' . $filename;
+            $contents = self::file_get_contents_curl($imageurl);
+            $savefile = fopen($uploadfile, 'w');
+            $isOK = fwrite($savefile, $contents);
+            fclose($savefile);
+            return $isOK ? $uploadfile : null;
+        } catch (\Throwable $th) {
+            //throw $th;
+        }
+        return null;
+    }
+
+    static function file_get_contents_curl($url)
+    {
+        $ch = curl_init();
+
+        // curl_setopt($ch, CURLOPT_AUTOREFERER, TRUE);
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, TRUE);
+
+        $data = curl_exec($ch);
+        curl_close($ch);
+
+        return $data;
     }
 
     static function getProductByName(string $name, string $post_type = "product")
