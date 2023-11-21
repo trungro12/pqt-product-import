@@ -40,7 +40,10 @@ class PQTProductImport_Menu_Admin
             $arrDataImport = self::readExcelFile($fileData, $importNumber);
             // $arrImported = self::insertProduct($arrDataImport, $importUnique);
 
-
+            if ($arrDataImport === null) {
+                echo '<script>alert("Không thể Upload File");</script>';
+                $arrDataImport = [];
+            }
 ?>
 
             <script>
@@ -78,6 +81,7 @@ class PQTProductImport_Menu_Admin
                         }
 
                         var index = 0;
+                        var isFinish = false;
                         // const count = arrData.length;
                         const callBackImport = function() {
                             $('#productOk').text(productOK);
@@ -85,9 +89,12 @@ class PQTProductImport_Menu_Admin
                             if (index >= arrData.length) {
                                 $('.waitForImport').remove();
                                 $('.loadingscreen').remove();
+                                if (arrData.length < 1) return;
+                                
                                 productErr = productTotal - productOK;
                                 showInfo.find('#productError').text(productErr);
-                                alert('Import hoàn tất!');
+                                isFinish = true;
+                                if (!isFinish) alert('Import hoàn tất!');
                                 return;
                             };
                             const arrDataProduct = [];
@@ -145,9 +152,9 @@ class PQTProductImport_Menu_Admin
                         <tr>
                             <th scope="row"><label for="blogname">Kiểm tra trùng lặp: </label></th>
                             <td>
-                                <input name="importUnique" <?php echo !empty($_POST['importUnique']) && (int) $_POST['importUnique'] == self::IMPORT_UNIQUE_UPDATE ? 'checked' : ''; ?> type="radio" value="<?php echo self::IMPORT_UNIQUE_UPDATE; ?>" class="regular-text">
+                                <input name="importUnique" <?php echo empty($_POST['importUnique']) || (int) $_POST['importUnique'] == self::IMPORT_UNIQUE_UPDATE ? 'checked' : ''; ?> type="radio" value="<?php echo self::IMPORT_UNIQUE_UPDATE; ?>" class="regular-text">
                                 <label for="">Cập nhật sản phẩm trùng lặp.</label><br>
-                                <input name="importUnique" <?php echo !empty($_POST['importUnique']) && (int) $_POST['importUnique'] == self::IMPORT_UNIQUE_UPDATE ? '' : 'checked'; ?> type="radio" value="<?php echo self::IMPORT_UNIQUE_SKIP; ?>" class="regular-text">
+                                <input name="importUnique" <?php echo !empty($_POST['importUnique']) && (int) $_POST['importUnique'] == self::IMPORT_UNIQUE_SKIP ? 'checked' : ''; ?> type="radio" value="<?php echo self::IMPORT_UNIQUE_SKIP; ?>" class="regular-text">
                                 <label for="">Bỏ qua nếu có sản phẩm trùng lặp.</label>
                             </td>
                         </tr>
@@ -170,6 +177,10 @@ class PQTProductImport_Menu_Admin
     {
         $arrData = [];
         $inputFile = $fileData['tmp_name'];
+
+        $inputFile = self::copyFileToUploadDir($inputFile);
+        if (empty($inputFile)) return null;
+
         $extension = strtoupper(end(explode(".", $fileData['name'])));
         if ($extension == 'XLSX' || $extension == 'ODS') {
 
@@ -189,10 +200,11 @@ class PQTProductImport_Menu_Admin
         } else {
             echo "Please upload an XLSX or ODS file";
         }
+        unlink($inputFile);
         return $arrData;
     }
 
-    static function insertProduct($arrDataImport, $unique = self::IMPORT_UNIQUE_SKIP)
+    static function insertProduct($arrDataImport, $unique = self::IMPORT_UNIQUE_UPDATE)
     {
         $postData = [];
         foreach ($arrDataImport as $value) {
@@ -352,6 +364,19 @@ class PQTProductImport_Menu_Admin
         set_post_thumbnail($parent_post_id, $attach_id);
     }
 
+    static function copyFileToUploadDir($fileName)
+    {
+        $uploaddir = wp_upload_dir();
+        if (!file_exists($uploaddir['path'])) mkdir($uploaddir['path'], 0755);
+        $uploadFile = $uploaddir['path'] . '/' . basename($fileName);
+
+        if (@move_uploaded_file($fileName, $uploadFile)) {
+            return $uploadFile;
+        }
+
+        return null;
+    }
+
 
     static function downloadImageFromUrl($imageUrl)
     {
@@ -415,7 +440,7 @@ class PQTProductImport_Menu_Admin
         function ajaxInsertProductImport()
         {
             $arrProduct = empty($_POST['arrProduct']) ? [] : $_POST['arrProduct'];
-            $importUnique = empty($_POST['importUnique']) ? PQTProductImport_Menu_Admin::IMPORT_UNIQUE_SKIP : (int) $_POST['importUnique'];
+            $importUnique = empty($_POST['importUnique']) ? PQTProductImport_Menu_Admin::IMPORT_UNIQUE_UPDATE : (int) $_POST['importUnique'];
             if ($count = count(PQTProductImport_Menu_Admin::insertProduct($arrProduct, $importUnique))) {
                 wp_send_json_success(['count' => $count]);
             } else wp_send_json_error();
