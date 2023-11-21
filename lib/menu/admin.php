@@ -5,6 +5,9 @@ use PhpOffice\PhpSpreadsheet\Reader\Xlsx;
 
 class PQTProductImport_Menu_Admin
 {
+    const IMPORT_UNIQUE_UPDATE = 1; // cập nhật sản phẩm trùng
+    const IMPORT_UNIQUE_SKIP = 2; // skip các sản phẩm trùng
+
     static function init()
     {
         require_once(PQT_PRODUCT__PLUGIN_DIR . "/vendor/autoload.php");
@@ -22,7 +25,7 @@ class PQTProductImport_Menu_Admin
 
     static function __htmlMenu()
     {
-        $excelMauURL = esc_url(PQT_PRODUCT__PLUGIN_URL . '/download/mau.xlsx');
+        $excelMauURL = esc_url(PQT_PRODUCT__PLUGIN_URL . 'download/mau.xlsx');
         $arrImported = [];
         if (
             isset($_FILES['importFile']) &&
@@ -32,7 +35,8 @@ class PQTProductImport_Menu_Admin
         ) {
             $fileData = $_FILES['importFile'];
             $importNumber = (int) $_POST['importNumber'];
-            $importUnique = (!empty($_POST['importUnique'])) && (int) $_POST['importUnique'] === 1 ? true : false;
+            $importStep = (int) $_POST['importStep'];
+            $importUnique = (!empty($_POST['importUnique'])) ? (int) $_POST['importUnique'] : 2;
             $arrDataImport = self::readExcelFile($fileData, $importNumber);
             // $arrImported = self::insertProduct($arrDataImport, $importUnique);
 
@@ -42,30 +46,29 @@ class PQTProductImport_Menu_Admin
             <script>
                 (function($) {
                     $(function() {
+                        const importMax = <?php echo $importNumber; ?>;
                         const arrData = JSON.parse(atob('<?php echo base64_encode(json_encode($arrDataImport)); ?>'));
+                        const productTotal = arrData.length;
                         var productOK = 0;
-                        const stepImport = 30;
                         var productErr = 0;
+                        const stepImport = <?php echo $importStep; ?>;
                         const showInfo = $('#showInfo');
+                        showInfo.show();
 
                         function importProduct(arrProduct, cb = function() {}) {
-                            showInfo.show();
                             $.ajax({
                                 type: "post",
                                 url: "<?php echo admin_url('admin-ajax.php'); ?>",
                                 data: {
                                     action: "ajaxInsertProductImport",
                                     arrProduct: arrProduct,
-                                    importUnique: <?php echo $importUnique; ?>
+                                    importUnique: <?php echo $importUnique; ?>,
                                 },
                                 success: function(msg) {
                                     if (msg.success) {
                                         productOK += msg.data.count;
-                                        showInfo.find('#productOK').text(productOK);
-                                    } else {
-                                        productErr += stepImport;
-                                        showInfo.find('#productError').text(productErr);
-                                    }
+
+                                    } else {}
                                     cb();
                                 },
                                 complete: function() {
@@ -77,9 +80,13 @@ class PQTProductImport_Menu_Admin
                         var index = 0;
                         // const count = arrData.length;
                         const callBackImport = function() {
+                            $('#productOk').text(productOK);
+
                             if (index >= arrData.length) {
                                 $('.waitForImport').remove();
                                 $('.loadingscreen').remove();
+                                productErr = productTotal - productOK;
+                                showInfo.find('#productError').text(productErr);
                                 alert('Import hoàn tất!');
                                 return;
                             };
@@ -107,10 +114,10 @@ class PQTProductImport_Menu_Admin
         <div class="wrap">
             <div id="showInfo" style="display: none;">
                 <div class="notice notice-success">
-                    <p> <b style="color:red" class="waitForImport">Đang thực hiện...</b> Đã Import <b style="color: red;"><span id="productOK">0</span></b> sản phẩm thành công.</p>
+                    <p> <b style="color:red" class="waitForImport">Đang thực hiện...</b> Đã Import <b style="color: red;"><span id="productOk">0</span></b> sản phẩm thành công.</p>
                 </div>
                 <div class="notice notice-error">
-                    <p><b style="color:red" class="waitForImport">Đang thực hiện...</b> Đã Import <b style="color: red;"><span id="productError">0</span></b> sản phẩm thất bại.</p>
+                    <p><b style="color:red" class="waitForImport">Đang thực hiện...</b><b style="color: red;"><span id="productError">0</span></b> sản phẩm thất bại hoặc đã bỏ qua.</p>
                 </div>
             </div>
 
@@ -125,14 +132,23 @@ class PQTProductImport_Menu_Admin
 
                         <tr>
                             <th scope="row"><label for="blogname">Số lượng (0 là toàn bộ): </label></th>
-                            <td><input name="importNumber" type="number" id="importNumber" value="0" class="regular-text"></td>
+                            <td><input name="importNumber" type="number" id="importNumber" value="<?php echo (int)(!empty($_POST['importNumber']) ? $_POST['importNumber'] : 0); ?>" class="regular-text"></td>
                         </tr>
 
                         <tr>
-                            <th scope="row"><label for="blogname">Check trùng lặp: </label></th>
+                            <th scope="row"><label for="blogname">Import mỗi lần: </label></th>
+                            <td><input name="importStep" type="number" id="importStep" value="<?php echo (int) (!empty($_POST['importStep']) && $_POST['importStep'] ? $_POST['importStep'] : 20); ?>" class="regular-text"><br>
+                                <label for="">Đối với file có nhiều sản phẩm, sẽ chia ra thành nhiều lần import để tránh bị gián đoạn.</label>
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <th scope="row"><label for="blogname">Kiểm tra trùng lặp: </label></th>
                             <td>
-                                <input name="importUnique" checked type="checkbox" id="importUnique" value="1" class="regular-text"><br>
-                                <label for="">Nếu có sản phẩm trùng, chỉ cập nhật các thuộc tính, không tạo sản phẩm mới.</label>
+                                <input name="importUnique" <?php echo !empty($_POST['importUnique']) && (int) $_POST['importUnique'] == self::IMPORT_UNIQUE_UPDATE ? 'checked' : ''; ?> type="radio" value="<?php echo self::IMPORT_UNIQUE_UPDATE; ?>" class="regular-text">
+                                <label for="">Cập nhật sản phẩm trùng lặp.</label><br>
+                                <input name="importUnique" <?php echo !empty($_POST['importUnique']) && (int) $_POST['importUnique'] == self::IMPORT_UNIQUE_UPDATE ? '' : 'checked'; ?> type="radio" value="<?php echo self::IMPORT_UNIQUE_SKIP; ?>" class="regular-text">
+                                <label for="">Bỏ qua nếu có sản phẩm trùng lặp.</label>
                             </td>
                         </tr>
 
@@ -168,7 +184,7 @@ class PQTProductImport_Menu_Admin
             foreach ($worksheet_arr as $row) {
                 $count++;
                 $arrData[] = $row;
-                if ($max > 0 && $max < $count) break;
+                if ($max > 0 && $count >= $max) break;
             }
         } else {
             echo "Please upload an XLSX or ODS file";
@@ -176,7 +192,7 @@ class PQTProductImport_Menu_Admin
         return $arrData;
     }
 
-    static function insertProduct($arrDataImport, $unique = false)
+    static function insertProduct($arrDataImport, $unique = self::IMPORT_UNIQUE_SKIP)
     {
         $postData = [];
         foreach ($arrDataImport as $value) {
@@ -199,7 +215,17 @@ class PQTProductImport_Menu_Admin
 
             // create new product 
             $postId = 0;
-            $post = $unique ? self::getProductByName($productName) : null;
+            // $post = self::getProductByName($productName);
+            $post = self::getProductBySku($sku);
+
+            if (!empty($post)) {
+
+                // check unique 
+                if ($unique == self::IMPORT_UNIQUE_SKIP) continue;
+
+                $postId = $post->ID;
+            }
+
             if (empty($post)) {
                 $postId = wp_insert_post(array(
                     //'post_title' => 'Adams Product',
@@ -208,7 +234,7 @@ class PQTProductImport_Menu_Admin
                     'post_status' => 'publish',
                     'post_type' => "product",
                 ));
-            } else $postId = $post->ID;
+            }
 
             if ($postId) {
 
@@ -275,7 +301,9 @@ class PQTProductImport_Menu_Admin
                 update_post_meta($postId, '_stock', '');
 
                 // upload image 
-                self::uploadImageToPost($urlImageLarge, $postId);
+                if (!has_post_thumbnail($postId)) {
+                    self::uploadImageToPost($urlImageLarge, $postId);
+                }
 
                 $postData[] = $postId;
             }
@@ -351,6 +379,31 @@ class PQTProductImport_Menu_Admin
         return $query->have_posts() ? reset($query->posts) : null;
     }
 
+    static function getProductBySku(string $sku)
+    {
+        $query = [
+            // 'lang'       => $lang,
+            'post_type'  => 'product',
+            'meta_query' => [
+                [
+                    'key'     => '_sku',
+                    'value'   => $sku,
+                    'compare' => '='
+                ]
+            ],
+            // 'tax_query'  => [
+            //     [
+            //         'taxonomy' => 'product_type',
+            //         'terms'    => [ 'grouped' ],
+            //         'field'    => 'name',
+            //     ]
+            // ]
+        ];
+        $posts = (new WP_Query())->query($query);
+
+        return count($posts) > 0 ? $posts[0] : null;
+    }
+
 
 
     static function addAjaxInsertProduct()
@@ -358,7 +411,7 @@ class PQTProductImport_Menu_Admin
         function ajaxInsertProductImport()
         {
             $arrProduct = empty($_POST['arrProduct']) ? [] : $_POST['arrProduct'];
-            $importUnique = empty($_POST['importUnique']) ? false : true;
+            $importUnique = empty($_POST['importUnique']) ? PQTProductImport_Menu_Admin::IMPORT_UNIQUE_SKIP : (int) $_POST['importUnique'];
             if ($count = count(PQTProductImport_Menu_Admin::insertProduct($arrProduct, $importUnique))) {
                 wp_send_json_success(['count' => $count]);
             } else wp_send_json_error();
