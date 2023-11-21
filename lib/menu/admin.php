@@ -98,7 +98,8 @@ class PQTProductImport_Menu_Admin
                                 return;
                             };
                             const arrDataProduct = [];
-                            for (let i = index; i < index + stepImport; i++) {
+                            const startIndex = index;
+                            for (let i = startIndex; i < startIndex + stepImport; i++) {
                                 index++;
                                 if (typeof arrData[i] !== 'object' || arrData.length <= i) break;
                                 // console.log(arrData[i]);
@@ -144,7 +145,7 @@ class PQTProductImport_Menu_Admin
 
                         <tr>
                             <th scope="row"><label for="blogname">Import mỗi lần: </label></th>
-                            <td><input name="importStep" type="number" id="importStep" value="<?php echo (int) (!empty($_POST['importStep']) && $_POST['importStep'] ? $_POST['importStep'] : 20); ?>" class="regular-text"><br>
+                            <td><input name="importStep" type="number" id="importStep" value="<?php echo (int) (!empty($_POST['importStep']) ? $_POST['importStep'] : 20); ?>" class="regular-text"><br>
                                 <label for="">Đối với file có nhiều sản phẩm, sẽ chia ra thành nhiều lần import để tránh bị gián đoạn.</label>
                             </td>
                         </tr>
@@ -178,7 +179,7 @@ class PQTProductImport_Menu_Admin
         $arrData = [];
         $inputFile = $fileData['tmp_name'];
 
-        $inputFile = self::copyFileToUploadDir($inputFile);
+        // $inputFile = self::copyFileToUploadDir($inputFile);
         if (empty($inputFile)) return null;
 
         $extension = strtoupper(end(explode(".", $fileData['name'])));
@@ -200,7 +201,7 @@ class PQTProductImport_Menu_Admin
         } else {
             echo "Please upload an XLSX or ODS file";
         }
-        unlink($inputFile);
+        // unlink($inputFile);
         return $arrData;
     }
 
@@ -224,6 +225,8 @@ class PQTProductImport_Menu_Admin
             $urlImageLarge = sanitize_text_field($value[13]); // Image Large URL
             $urlImageSmall = sanitize_text_field($value[14]); // Image Small URL
             $url = sanitize_text_field($value[15]); // url product
+
+            if (empty($sku) || empty($productName)) continue;
 
             // create new product 
             $postId = 0;
@@ -251,22 +254,24 @@ class PQTProductImport_Menu_Admin
             if ($postId) {
 
                 // insert product category 
-                $category = get_term_by('name', $productCatName, 'product_cat');
-                $categoryId = 0;
-                if (empty($category)) {
-                    $category = wp_insert_term(
-                        $productCatName, // the term 
-                        'product_cat', // the Woocommerce product category taxonomy
-                        array( // (optional)
-                            // 'description'=> 'This is a red apple.', // (optional)
-                            // 'slug' => 'apple', // optional
-                            // 'parent'=> $parent_term['term_id']  // (Optional) The parent numeric term id
-                        )
-                    );
+                if (!empty($productCatName)) {
+                    $category = get_term_by('name', $productCatName, 'product_cat');
+                    $categoryId = 0;
+                    if (empty($category)) {
+                        $category = wp_insert_term(
+                            $productCatName, // the term 
+                            'product_cat', // the Woocommerce product category taxonomy
+                            array( // (optional)
+                                // 'description'=> 'This is a red apple.', // (optional)
+                                // 'slug' => 'apple', // optional
+                                // 'parent'=> $parent_term['term_id']  // (Optional) The parent numeric term id
+                            )
+                        );
+                    }
+                    if ($category) $categoryId = $category->term_id;
+                    // set cat to product 
+                    wp_set_post_terms($postId, array($categoryId), 'product_cat', true);
                 }
-                if ($category) $categoryId = $category->term_id;
-                // set cat to product 
-                wp_set_post_terms($postId, array($categoryId), 'product_cat', true);
 
 
                 // add product attr 
@@ -330,6 +335,9 @@ class PQTProductImport_Menu_Admin
 
     static function uploadImageToPost($imageUrl, $postId)
     {
+
+        if (empty($imageUrl)) return;
+
         $filename = self::downloadImageFromUrl($imageUrl);
         if (empty($filename)) return;
 
