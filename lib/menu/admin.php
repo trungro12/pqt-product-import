@@ -493,6 +493,7 @@ class PQTProductImport_Menu_Admin
                 background: black;
                 display: flex;
                 align-items: center;
+                z-index: 99999;
             }
 
             .loader {
