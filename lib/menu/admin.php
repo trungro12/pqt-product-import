@@ -26,7 +26,6 @@ class PQTProductImport_Menu_Admin
     static function __htmlMenu()
     {
         $excelMauURL = esc_url(PQT_PRODUCT__PLUGIN_URL . 'download/mau.xlsx');
-        $arrImported = [];
         if (
             isset($_FILES['importFile']) &&
             !empty($_POST['action']) &&
@@ -34,26 +33,44 @@ class PQTProductImport_Menu_Admin
             wp_verify_nonce($_POST['_wpnonce'], $_POST['action'])
         ) {
             $fileData = $_FILES['importFile'];
-            $importNumber = (int) $_POST['importNumber'];
-            $importStep = (int) $_POST['importStep'];
+            $importSKU = sanitize_text_field($_POST['importSKU']);
+            $importNumber = !empty($_POST['importNumber']) ? (int) $_POST['importNumber'] : 0;
+            $importStep = !empty($_POST['importStep']) ? (int) $_POST['importStep'] : 20;
             $importUnique = (!empty($_POST['importUnique'])) ? (int) $_POST['importUnique'] : 2;
-            $arrDataImport = self::readExcelFile($fileData, $importNumber);
-            // $arrImported = self::insertProduct($arrDataImport, $importUnique);
+
+            if ($importSKU) {
+                
+                $importNumber = 0;
+                $importSKU = array_map(function ($sku) {
+                    return sanitize_text_field($sku);
+                }, explode(",", sanitize_text_field($importSKU)));
+            }
+            else $importSKU = [];
+
+            $arrDataImport = self::readExcelFile($fileData, $importNumber, $importSKU);
 
             if ($arrDataImport === null) {
                 echo '<script>alert("Không thể Upload File");</script>';
                 $arrDataImport = [];
             }
+
+            // var_dump($arrDataImport);die;
 ?>
 
             <script>
                 (function($) {
                     $(function() {
-                        const importMax = <?php echo $importNumber; ?>;
                         const arrData = JSON.parse(atob('<?php echo base64_encode(json_encode($arrDataImport)); ?>'));
+
+                        if(arrData.length < 1){
+                            alert('Không có sản phẩm theo yêu cầu để import');
+                            return;
+                        };
+
+                        const countSKU = <?php echo count($importSKU); ?>;
                         var productOk = 0;
                         var productErr = 0;
-                        const stepImport = <?php echo $importStep; ?>;
+                        const stepImport = (countSKU < 1) ? <?php echo $importStep; ?> : arrData.length;
                         const showInfo = $('#showInfo');
                         showInfo.show();
 
@@ -70,6 +87,8 @@ class PQTProductImport_Menu_Admin
                                     if (msg.success) {
                                         productOk += msg.data.countOk;
                                         productErr += msg.data.countErr;
+                                        $('#productOk').text(productOk);
+                                        $('#productError').text(productErr);
 
                                     } else {}
                                     cb();
@@ -84,18 +103,8 @@ class PQTProductImport_Menu_Admin
                         var isFinish = false;
                         // const count = arrData.length;
                         const callBackImport = function() {
-                            $('#productOk').text(productOk);
 
-                            if (index >= arrData.length) {
-                                $('.waitForImport').remove();
-                                $('.loadingscreen').remove();
-                                if (arrData.length < 1) return;
 
-                                showInfo.find('#productError').text(productErr);
-                                if (!isFinish) alert('Import hoàn tất!');
-                                isFinish = true;
-                                return;
-                            };
                             const arrDataProduct = [];
                             const startIndex = index;
                             for (let i = startIndex; i < startIndex + stepImport; i++) {
@@ -106,6 +115,17 @@ class PQTProductImport_Menu_Admin
 
                             }
                             if (arrDataProduct.length > 0) importProduct(arrDataProduct, callBackImport);
+                            else {
+                                if (index >= arrData.length) {
+                                    $('.waitForImport').remove();
+                                    $('.loadingscreen').remove();
+                                    if (arrData.length < 1) return;
+
+                                    if (!isFinish) alert('Import hoàn tất!');
+                                    isFinish = true;
+                                    return;
+                                };
+                            }
                         }
                         callBackImport();
                     });
@@ -150,6 +170,13 @@ class PQTProductImport_Menu_Admin
                         </tr>
 
                         <tr>
+                            <th scope="row"><label for="blogname">Chỉ cập nhật những SKU này: </label></th>
+                            <td><input name="importSKU" type="text" id="importSKU" value="<?php echo (!empty($_POST['importSKU']) ? $_POST['importSKU'] : ''); ?>" class="regular-text"><br>
+                                <label for="">Chỉ cập nhật hoặc import những SKU chỉ định (cách nhau bởi dấu phẩy).</label>
+                            </td>
+                        </tr>
+
+                        <tr>
                             <th scope="row"><label for="blogname">Kiểm tra trùng lặp: </label></th>
                             <td>
                                 <input name="importUnique" <?php echo empty($_POST['importUnique']) || (int) $_POST['importUnique'] == self::IMPORT_UNIQUE_UPDATE ? 'checked' : ''; ?> type="radio" value="<?php echo self::IMPORT_UNIQUE_UPDATE; ?>" class="regular-text">
@@ -167,14 +194,37 @@ class PQTProductImport_Menu_Admin
                 </table>
                 <?php submit_button('Import') ?>
             </form>
+            <script>
+                (function($) {
+                    $('#importSKU').change(function() {
+                        checkImportSKU(this);
+                    });
+                    checkImportSKU('#importSKU');
+
+
+                    function checkImportSKU(e) {
+                        if ($(e).val().trim().length > 0) {
+                            $('#importStep').val(0).attr('disabled', '');
+                            $('#importNumber').val(0).attr('disabled', '');
+                        } else {
+                            $('#importStep').val(20).removeAttr('disabled');
+                            $('#importNumber').val(0).removeAttr('disabled');
+                        }
+                    }
+
+
+                })(jQuery);
+            </script>
         </div>
     <?php
     }
 
 
 
-    static function readExcelFile($fileData, $max = 0)
+    static function readExcelFile($fileData, $max = 0, $arrSKU = [])
     {
+        if(!is_array($arrSKU)) $arrSKU = [];
+
         $arrData = [];
         $inputFile = $fileData['tmp_name'];
 
@@ -193,6 +243,9 @@ class PQTProductImport_Menu_Admin
             unset($worksheet_arr[0]);
             $count = 0;
             foreach ($worksheet_arr as $row) {
+                $sku = sanitize_text_field($row[0]); // SKU
+                if (!empty($arrSKU) && !in_array($sku, $arrSKU)) continue;
+
                 $count++;
                 $arrData[] = $row;
                 if ($max > 0 && $count >= $max) break;
@@ -206,6 +259,9 @@ class PQTProductImport_Menu_Admin
 
     static function insertProduct($arrDataImport, $unique = self::IMPORT_UNIQUE_UPDATE)
     {
+
+        $countOk = 0;
+        $countErr = 0;
         $postData = [];
         foreach ($arrDataImport as $value) {
             $sku = sanitize_text_field($value[0]); // SKU
@@ -225,7 +281,10 @@ class PQTProductImport_Menu_Admin
             $urlImageSmall = sanitize_text_field($value[14]); // Image Small URL
             $url = sanitize_text_field($value[15]); // url product
 
-            if (empty($sku) || empty($productName)) continue;
+            if (empty($sku) || empty($productName)) {
+                $countErr++;
+                continue;
+            }
 
             // create new product 
             $postId = 0;
@@ -235,7 +294,10 @@ class PQTProductImport_Menu_Admin
             if (!empty($post)) {
 
                 // check unique 
-                if ($unique == self::IMPORT_UNIQUE_SKIP) continue;
+                if ($unique == self::IMPORT_UNIQUE_SKIP) {
+                    $countErr++;
+                    continue;
+                }
 
                 $postId = $post->ID;
             }
@@ -322,9 +384,14 @@ class PQTProductImport_Menu_Admin
                 }
 
                 $postData[] = $postId;
+                $countOk++;
             }
         }
-        return $postData;
+        return [
+            'postData' => $postData,
+            'countOk' => $countOk,
+            'countErr' => $countErr
+        ];
     }
 
 
@@ -467,10 +534,11 @@ class PQTProductImport_Menu_Admin
     {
         function ajaxInsertProductImport()
         {
+
             $arrProduct = empty($_POST['arrProduct']) ? [] : $_POST['arrProduct'];
             $importUnique = empty($_POST['importUnique']) ? PQTProductImport_Menu_Admin::IMPORT_UNIQUE_UPDATE : (int) $_POST['importUnique'];
-            if ($count = count(PQTProductImport_Menu_Admin::insertProduct($arrProduct, $importUnique))) {
-                wp_send_json_success(['countOk' => $count, 'countErr' => count($arrProduct) - $count]);
+            if ($dataReturn = (PQTProductImport_Menu_Admin::insertProduct($arrProduct, $importUnique))) {
+                wp_send_json_success(['countOk' => $dataReturn['countOk'], 'countErr' => $dataReturn['countErr']]);
             } else wp_send_json_error();
             exit;
         }
